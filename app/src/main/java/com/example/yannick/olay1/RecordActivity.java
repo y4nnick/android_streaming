@@ -27,6 +27,7 @@ import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 
 import org.bytedeco.javacpp.avcodec;
+import org.bytedeco.javacpp.avutil;
 import org.bytedeco.javacpp.opencv_core;
 import org.bytedeco.javacv.FFmpegFrameFilter;
 import org.bytedeco.javacv.FFmpegFrameRecorder;
@@ -46,7 +47,7 @@ public class RecordActivity extends Activity implements OnClickListener {
     private final static String CLASS_LABEL = "RecordActivity";
     private final static String LOG_TAG = CLASS_LABEL;
 
-    private String ffmpeg_link = "rtmp://rtmp-api.facebook.com:80/rtmp/141706516283085?ds=1&a=AaYvjHrd0iNYELpu";
+    private String ffmpeg_link = "rtmp://rtmp-api.facebook.com:80/rtmp/142267892893614?ds=1&a=AaYdIYDVnmeSaBGy";
 
     long startTime = 0;
     boolean recording = false;
@@ -218,6 +219,7 @@ public class RecordActivity extends Activity implements OnClickListener {
 
         // 6) Pixel Aspect Ratio: Square. TODO! How should we set this?
         // Maybe over : recorder.setPixelFormat(); but with what parameter?
+        //recorder.setPixelFormat(avutil.AV_PIX_FMT_BGRA64);
 
         // 7) Frame Types: Progressive Scan. TODO! How should we set this?
 
@@ -269,7 +271,7 @@ public class RecordActivity extends Activity implements OnClickListener {
         Log.i(LOG_TAG, "recorder initialize success");
 
         try{
-            filter = new FFmpegFrameFilter("movie="+path+"/image.png [logo];[in][logo]overlay=0:0:1:format=rgb [out]",imageWidth, imageHeight);
+            filter = new FFmpegFrameFilter("movie="+path+"/image.png [logo];[in][logo]overlay=0:0:format=rgb [out]",imageWidth, imageHeight);
             filter.start();
         }catch (FrameFilter.Exception e){
             Log.e(CLASS_LABEL,"Error while starting filter: "+e.getMessage());
@@ -549,8 +551,23 @@ public class RecordActivity extends Activity implements OnClickListener {
                     if (t > recorder.getTimestamp()) {
                         recorder.setTimestamp(t);
                     }
-                    recorder.record(yuvImage);
+
+                    Frame frame;
+                    while ((frame = filter.pull()) != null) {
+                        // AV_PIX_FMT_ARGB --> 4 auf einmal, alles SW
+                        // AV_PIX_FMT_BGR8 --> 1 bissl zu großes, sehr strange farben
+                        // AV_PIX_FMT_BGR4_BYTE --> 1 bissl zu groß, stranger blau stich
+                        // AV_PIX_FMT_YUVA422P_LIBAV --> sws_getCachedContext() error: Cannot initialize the conversion context.
+
+
+                        recorder.record(frame,avutil.AV_PIX_FMT_NV21);
+                    }
+
+                  //  recorder.record(yuvImage);
                 } catch (FFmpegFrameRecorder.Exception e) {
+                    Log.v(LOG_TAG,e.getMessage());
+                    e.printStackTrace();
+                }catch (FrameFilter.Exception e){
                     Log.v(LOG_TAG,e.getMessage());
                     e.printStackTrace();
                 }
