@@ -539,12 +539,7 @@ public class RecordActivity extends Activity implements OnClickListener {
 
                 ((ByteBuffer)yuvImage.image[0].position(0)).put(data);
 
-                try{
-                    filter.push(yuvImage);
-                }catch (FrameFilter.Exception ex){
-                    ex.printStackTrace();
-                    Log.e(CLASS_LABEL,"Error while pushing filter: "+ex.getMessage());
-                }
+
 
                 try {
                     long t = 1000 * (System.currentTimeMillis() - startTime);
@@ -552,14 +547,15 @@ public class RecordActivity extends Activity implements OnClickListener {
                         recorder.setTimestamp(t);
                     }
 
+                    // AV_PIX_FMT_ARGB --> 4 auf einmal, alles SW
+                    // AV_PIX_FMT_BGR8 --> 1 bissl zu großes, sehr strange farben
+                    // AV_PIX_FMT_BGR4_BYTE --> 1 bissl zu groß, stranger blau stich
+                    // AV_PIX_FMT_YUVA422P_LIBAV --> sws_getCachedContext() error: Cannot initialize the conversion context.
+
+                    filter.push(yuvImage);
+
                     Frame frame;
                     while ((frame = filter.pull()) != null) {
-                        // AV_PIX_FMT_ARGB --> 4 auf einmal, alles SW
-                        // AV_PIX_FMT_BGR8 --> 1 bissl zu großes, sehr strange farben
-                        // AV_PIX_FMT_BGR4_BYTE --> 1 bissl zu groß, stranger blau stich
-                        // AV_PIX_FMT_YUVA422P_LIBAV --> sws_getCachedContext() error: Cannot initialize the conversion context.
-
-
                         recorder.record(frame,avutil.AV_PIX_FMT_NV21);
                     }
 
