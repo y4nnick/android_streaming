@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ImageFormat;
 import android.graphics.Paint;
 import android.hardware.Camera;
 import android.hardware.Camera.PreviewCallback;
@@ -42,12 +43,14 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import jp.co.cyberagent.android.gpuimage.GPUImageNativeLibrary;
+
 public class RecordActivity extends Activity implements OnClickListener {
 
     private final static String CLASS_LABEL = "RecordActivity";
     private final static String LOG_TAG = CLASS_LABEL;
 
-    private String ffmpeg_link = "rtmp://rtmp-api.facebook.com:80/rtmp/142267892893614?ds=1&a=AaYdIYDVnmeSaBGy";
+    private String ffmpeg_link = "rtmp://rtmp-api.facebook.com:80/rtmp/146327692487634?ds=1&a=Aab2VI3jpVtgFepQ";
 
     long startTime = 0;
     boolean recording = false;
@@ -101,12 +104,6 @@ public class RecordActivity extends Activity implements OnClickListener {
         setContentView(R.layout.activity_main);
 
         path = Environment.getExternalStorageDirectory().getAbsolutePath();
-       // path = getBaseContext().getCacheDir().getAbsolutePath();
-
-       // Log.e(CLASS_LABEL,Environment.getExternalStorageDirectory().getAbsolutePath());
-        //Log.e(CLASS_LABEL,getBaseContext().getCacheDir().getAbsolutePath());
-
-       // throw new RuntimeException();
 
         initLayout();
     }
@@ -135,7 +132,6 @@ public class RecordActivity extends Activity implements OnClickListener {
         screenWidth = display.getWidth();
         screenHeight = display.getHeight();
 
-
         RelativeLayout topLayout = new RelativeLayout(this);
         setContentView(topLayout);
 
@@ -161,15 +157,16 @@ public class RecordActivity extends Activity implements OnClickListener {
             prev_rw = display_width_d;
             prev_rh = (int) (1.0 * display_width_d * live_height / live_width);
         }
+
         layoutParam = new RelativeLayout.LayoutParams(prev_rw, prev_rh);
         layoutParam.topMargin = (int) (1.0 * bg_screen_by * screenHeight / bg_height);
         layoutParam.leftMargin = (int) (1.0 * bg_screen_bx * screenWidth / bg_width);
 
+
         cameraDevice = Camera.open();
-        Log.i(LOG_TAG, "cameara open");
+        cameraDevice.getParameters().setPreviewFormat(ImageFormat.YV12);
         cameraView = new CameraView(this, cameraDevice);
         topLayout.addView(cameraView, layoutParam);
-        Log.i(LOG_TAG, "cameara preview start: OK");
     }
 
     FFmpegFrameFilter filter;
@@ -209,7 +206,7 @@ public class RecordActivity extends Activity implements OnClickListener {
         recorder.setGopSize(60);
 
         // 3) Bitrate <  4000 Kbps
-        recorder.setVideoBitrate(2000000);
+        recorder.setVideoBitrate(128000);
 
         // 4) Title can not be set here, must be set in the publishing tool or while creating the live video over the API
 
@@ -219,7 +216,7 @@ public class RecordActivity extends Activity implements OnClickListener {
 
         // 6) Pixel Aspect Ratio: Square. TODO! How should we set this?
         // Maybe over : recorder.setPixelFormat(); but with what parameter?
-        //recorder.setPixelFormat(avutil.AV_PIX_FMT_BGRA64);
+        //recorder.setPixelFormat(avutil.AV_PIX_FMT_BGR24);
 
         // 7) Frame Types: Progressive Scan. TODO! How should we set this?
 
@@ -271,7 +268,7 @@ public class RecordActivity extends Activity implements OnClickListener {
         Log.i(LOG_TAG, "recorder initialize success");
 
         try{
-            filter = new FFmpegFrameFilter("movie="+path+"/image.png [logo];[in][logo]overlay=0:0:format=rgb [out]",imageWidth, imageHeight);
+            filter = new FFmpegFrameFilter("movie="+path+"/test.png [logo];[in][logo]overlay=0:0:format=yuv420 [out]",imageWidth, imageHeight);
             filter.start();
         }catch (FrameFilter.Exception e){
             Log.e(CLASS_LABEL,"Error while starting filter: "+e.getMessage());
@@ -358,10 +355,8 @@ public class RecordActivity extends Activity implements OnClickListener {
             ShortBuffer audioData;
             int bufferReadResult;
 
-            bufferSize = AudioRecord.getMinBufferSize(sampleAudioRateInHz,
-                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-            audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleAudioRateInHz,
-                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize);
+            bufferSize = AudioRecord.getMinBufferSize(sampleAudioRateInHz, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+            audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleAudioRateInHz,AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize);
 
             audioData = ShortBuffer.allocate(bufferSize);
 
@@ -370,17 +365,12 @@ public class RecordActivity extends Activity implements OnClickListener {
 
             /* ffmpeg_audio encoding loop */
             while (runAudioThread) {
-
-                //Log.v(LOG_TAG,"recording? " + recording);
                 bufferReadResult = audioRecord.read(audioData.array(), 0, audioData.capacity());
                 audioData.limit(bufferReadResult);
                 if (bufferReadResult > 0) {
-                    // If "recording" isn't true when start this thread, it never get's set according to this if statement...!!!
-                    // Why?  Good question...
                     if (recording) {
                         try {
                             recorder.recordSamples(audioData);
-                            //Log.v(LOG_TAG,"recording " + 1024*i + " to " + 1024*i+1024);
                         } catch (FFmpegFrameRecorder.Exception e) {
                             Log.v(LOG_TAG,e.getMessage());
                             e.printStackTrace();
@@ -388,14 +378,12 @@ public class RecordActivity extends Activity implements OnClickListener {
                     }
                 }
             }
-            Log.v(LOG_TAG,"AudioThread Finished, release audioRecord");
 
             /* encoding finish, release recorder */
             if (audioRecord != null) {
                 audioRecord.stop();
                 audioRecord.release();
                 audioRecord = null;
-                Log.v(LOG_TAG,"audioRecord released");
             }
         }
     }
@@ -531,15 +519,7 @@ public class RecordActivity extends Activity implements OnClickListener {
             /* get video data */
             if (yuvImage != null && recording) {
 
-                // (1) Inserting a little black rect into the camera frame:
-              /*  opencv_core.Mat submat = yuvImage.submat(0, 100, 0, 100);
-                opencv_core.Mat image =  new opencv_core.Mat(100, 100, yuvImage.type(), new opencv_core.Scalar(0,0,0));
-                image.copyTo(submat);
-*/
-
                 ((ByteBuffer)yuvImage.image[0].position(0)).put(data);
-
-
 
                 try {
                     long t = 1000 * (System.currentTimeMillis() - startTime);
@@ -547,19 +527,13 @@ public class RecordActivity extends Activity implements OnClickListener {
                         recorder.setTimestamp(t);
                     }
 
-                    // AV_PIX_FMT_ARGB --> 4 auf einmal, alles SW
-                    // AV_PIX_FMT_BGR8 --> 1 bissl zu großes, sehr strange farben
-                    // AV_PIX_FMT_BGR4_BYTE --> 1 bissl zu groß, stranger blau stich
-                    // AV_PIX_FMT_YUVA422P_LIBAV --> sws_getCachedContext() error: Cannot initialize the conversion context.
-
                     filter.push(yuvImage);
 
                     Frame frame;
                     while ((frame = filter.pull()) != null) {
-                        recorder.record(frame,avutil.AV_PIX_FMT_NV21);
+                        recorder.record(frame,avutil.AV_PIX_FMT_YUV420P);
                     }
 
-                  //  recorder.record(yuvImage);
                 } catch (FFmpegFrameRecorder.Exception e) {
                     Log.v(LOG_TAG,e.getMessage());
                     e.printStackTrace();

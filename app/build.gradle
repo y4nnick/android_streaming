@@ -29,11 +29,15 @@ android {
 
 
 repositories {
+    jcenter()
     mavenCentral()
 }
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
     testCompile 'junit:junit:4.12'
+
+    compile 'jp.co.cyberagent.android.gpuimage:gpuimage-library:1.4.1'
+
     compile 'com.android.support:appcompat-v7:22.1.0'
 
     compile group: 'org.bytedeco', name: 'javacv', version: '1.1'
